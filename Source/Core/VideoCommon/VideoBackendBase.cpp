@@ -49,18 +49,22 @@
 #include "VideoCommon/CPMemory.h"
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/EFBInterface.h"
+#include "VideoCommon/ElementsGroupManager.h"
 #include "VideoCommon/Fifo.h"
 #include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/GeometryShaderManager.h"
 #include "VideoCommon/GraphicsModSystem/Runtime/GraphicsModManager.h"
+#include "VideoCommon/HideObjectEngine.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/PixelEngine.h"
 #include "VideoCommon/PixelShaderManager.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/Resources/CustomResourceManager.h"
+#include "VideoCommon/ShaderHunter.h"
 #include "VideoCommon/TMEM.h"
 #include "VideoCommon/TextureCacheBase.h"
+#include "VideoCommon/TextureElementManager.h"
 #include "VideoCommon/VertexLoaderManager.h"
 #include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VertexShaderManager.h"
@@ -396,6 +400,16 @@ void VideoBackendBase::ShutdownShared()
   g_gfx.reset();
 
   m_initialized = false;
+
+  // The VR override managers are process-lifetime singletons that lazily load per game ID and
+  // skip the load when the ID already matches. Without dropping the cached ID here, booting the
+  // same game twice in one process reuses the overrides from the first boot, so edits made in
+  // between (e.g. enabling one in the Android per-game settings) only appear after a full
+  // application restart. Loading with an empty ID clears the state and the cached ID.
+  ShaderHunter::GetInstance().LoadOverrides("");
+  ElementsGroupManager::GetInstance().LoadOverrides("");
+  TextureElementManager::GetInstance().LoadOverrides("");
+  HideObjectEngine::Engine::GetInstance().LoadCodes("");
 
   VertexLoaderManager::Clear();
   system.GetFifo().Shutdown();
