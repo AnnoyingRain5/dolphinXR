@@ -3295,18 +3295,39 @@ void OpenXRManager::GetEyeProjectionRows(
     std::array<std::array<float, 4>, 4>& out_proj_rows,
     std::array<std::array<float, 4>, 2>& out_z_rows) const
 {
+  GetEyeProjectionRowsImpl(units_per_meter, true, out_proj_rows, out_z_rows);
+}
+
+void OpenXRManager::GetTrackedEyeProjectionRows(
+    float units_per_meter,
+    std::array<std::array<float, 4>, 4>& out_proj_rows,
+    std::array<std::array<float, 4>, 2>& out_z_rows) const
+{
+  GetEyeProjectionRowsImpl(units_per_meter, false, out_proj_rows, out_z_rows);
+}
+
+void OpenXRManager::GetEyeProjectionRowsImpl(
+    float units_per_meter, bool apply_game_camera,
+    std::array<std::array<float, 4>, 4>& out_proj_rows,
+    std::array<std::array<float, 4>, 2>& out_z_rows) const
+{
   const float s = std::max(units_per_meter, 0.0001f);
   constexpr float DEG_TO_RAD = 0.01745329252f;
   const float lean_back_rad =
-      g_ActiveConfig.vr_enable_lean_back_angle ? g_ActiveConfig.vr_lean_back_angle * DEG_TO_RAD :
-                                                 0.0f;
+      apply_game_camera && g_ActiveConfig.vr_enable_lean_back_angle ?
+          g_ActiveConfig.vr_lean_back_angle * DEG_TO_RAD :
+          0.0f;
   // Positive UI values should move the camera forward.
   // In this projection path, decreasing eye-space Z corresponds to moving forward.
   const float camera_forward_units =
-      g_ActiveConfig.vr_enable_camera_forward ? -g_ActiveConfig.vr_camera_forward * s : 0.0f;
+      apply_game_camera && g_ActiveConfig.vr_enable_camera_forward ?
+          -g_ActiveConfig.vr_camera_forward * s :
+          0.0f;
   // Positive UI values should move the camera upward.
   const float camera_height_units =
-      g_ActiveConfig.vr_enable_camera_height ? g_ActiveConfig.vr_camera_height * s : 0.0f;
+      apply_game_camera && g_ActiveConfig.vr_enable_camera_height ?
+          g_ActiveConfig.vr_camera_height * s :
+          0.0f;
 
   const std::array<XREyeView, 2> eye_views = GetTrackingAdjustedEyeViews();
 
@@ -3358,7 +3379,7 @@ void OpenXRManager::GetEyeProjectionRows(
     float m00 = r00, m01 = r01, m02 = r02;
     float m10 = r10, m11 = r11, m12 = r12;
     float m20 = r20, m21 = r21, m22 = r22;
-    if (m_camera_anchor_rotation_active)
+    if (apply_game_camera && m_camera_anchor_rotation_active)
     {
       const std::array<float, 9>& A = m_camera_anchor_rotation;
       m00 = A[0] * r00 + A[1] * r10 + A[2] * r20;
@@ -3413,7 +3434,7 @@ void OpenXRManager::GetEyeProjectionRows(
       // head orientation. This keeps head tracking anchored like freelook offsets.
       ez += camera_forward_units;
     }
-    if (m_camera_anchor_rotation_active)
+    if (apply_game_camera && m_camera_anchor_rotation_active)
     {
       // The offsets above are rig-space; rotate them into view space so IPD, room
       // tracking and the fixed camera offsets stay aligned with the turned rig.
@@ -3426,9 +3447,12 @@ void OpenXRManager::GetEyeProjectionRows(
     // Camera anchor: committed element position, already in game units and game view
     // space (see CommitCameraAnchorFrame). Zero when no anchor override is active;
     // capture is gated on the enable toggle, so disabling glides the camera home.
-    ex += m_camera_anchor_position[0];
-    ey += m_camera_anchor_position[1];
-    ez += m_camera_anchor_position[2];
+    if (apply_game_camera)
+    {
+      ex += m_camera_anchor_position[0];
+      ey += m_camera_anchor_position[1];
+      ez += m_camera_anchor_position[2];
+    }
 
     // W component: -dot(combined_xyz, eye_pos) using the ROTATED projection rows.
     // This gives the correct full view transform: P · R^T · (viewPos - eye_pos).

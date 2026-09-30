@@ -295,8 +295,11 @@ void GeometryShaderManager::SetConstants(PrimitiveType prim)
             std::array<std::array<float, 4>, 2> eye_z_rows{};
             VR::g_openxr->GetEyeProjectionRows(upm, eye_projection_rows, eye_z_rows);
 
-            // OpenXR stereo path bypasses the classic cproj path, so apply freelook here too.
-            if (perspective && g_freelook_camera.IsActive())
+            // OpenXR stereo bypasses the classic cproj path, so bake Free Look into the cached
+            // game-camera rows.  Do this regardless of the current draw type: with the per-frame
+            // pose lock, an ortho draw may be the one that refreshes the cache for all later
+            // perspective draws in the frame.
+            if (g_freelook_camera.IsActive())
             {
               const Common::Matrix44 freelook_view = g_freelook_camera.GetView();
               ApplyRowTransform(&eye_projection_rows, freelook_view);
@@ -305,6 +308,16 @@ void GeometryShaderManager::SetConstants(PrimitiveType prim)
 
             m_cached_eye_projection = eye_projection_rows;
             m_cached_eye_z_row = eye_z_rows;
+
+            // Cache a second projection from the exact same tracked pose without any game-camera
+            // adjustment.  Orthographic HUD and other virtual-screen routes select this below, so
+            // Free Look, Camera Forward/Height, and Camera Anchor only move immersive 3D geometry.
+            std::array<std::array<float, 4>, 4> tracked_eye_projection_rows{};
+            std::array<std::array<float, 4>, 2> tracked_eye_z_rows{};
+            VR::g_openxr->GetTrackedEyeProjectionRows(upm, tracked_eye_projection_rows,
+                                                       tracked_eye_z_rows);
+            m_cached_tracked_eye_projection = tracked_eye_projection_rows;
+            m_cached_tracked_eye_z_row = tracked_eye_z_rows;
             m_cached_units_per_meter = upm;
 
             // Unrotated per-eye projection rows for head-locked content.
@@ -319,13 +332,6 @@ void GeometryShaderManager::SetConstants(PrimitiveType prim)
 
             m_vr_pose_needs_refresh = false;
           }
-
-          constants.eye_projection[0] = m_cached_eye_projection[0];
-          constants.eye_projection[1] = m_cached_eye_projection[1];
-          constants.eye_projection[2] = m_cached_eye_projection[2];
-          constants.eye_projection[3] = m_cached_eye_projection[3];
-          constants.eye_z_row[0] = m_cached_eye_z_row[0];
-          constants.eye_z_row[1] = m_cached_eye_z_row[1];
 
           // Unrotated per-eye projection rows for head-locked content (cached above).
           constants.head_projection[0] = m_cached_head_projection[0];
@@ -507,6 +513,25 @@ void GeometryShaderManager::SetConstants(PrimitiveType prim)
         {
           constants.stereoparams[3] = vr_stereo_override;
           vr_stereo_override = std::numeric_limits<float>::quiet_NaN();
+        }
+
+        if (VR::g_openxr && VR::g_openxr->IsSessionRunning())
+        {
+          // Only the normal immersive-perspective route represents the game camera.  Virtual
+          // screens (including orthographic HUD and perspective Screen Pane draws) stay tied to
+          // the tracked room pose and therefore do not inherit Free Look or camera offsets.
+          const bool use_game_camera =
+              constants.stereoparams[3] > 0.5f && constants.stereoparams[3] < 1.5f;
+          const auto& eye_projection = use_game_camera ? m_cached_eye_projection :
+                                                         m_cached_tracked_eye_projection;
+          const auto& eye_z_row =
+              use_game_camera ? m_cached_eye_z_row : m_cached_tracked_eye_z_row;
+          constants.eye_projection[0] = eye_projection[0];
+          constants.eye_projection[1] = eye_projection[1];
+          constants.eye_projection[2] = eye_projection[2];
+          constants.eye_projection[3] = eye_projection[3];
+          constants.eye_z_row[0] = eye_z_row[0];
+          constants.eye_z_row[1] = eye_z_row[1];
         }
 
         const bool perspective_hud =

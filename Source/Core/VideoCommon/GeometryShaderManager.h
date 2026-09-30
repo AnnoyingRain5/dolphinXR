@@ -97,6 +97,10 @@ private:
   // otherwise refreshed every SetConstants call.
   std::array<std::array<float, 4>, 4> m_cached_eye_projection{};
   std::array<std::array<float, 4>, 2> m_cached_eye_z_row{};
+  // Same pose snapshot as the eye rows above, but without game-camera adjustments.  Screen/HUD
+  // routes use these so their placement is independent of Free Look and camera offsets.
+  std::array<std::array<float, 4>, 4> m_cached_tracked_eye_projection{};
+  std::array<std::array<float, 4>, 2> m_cached_tracked_eye_z_row{};
   std::array<std::array<float, 4>, 4> m_cached_head_projection{};
   float m_cached_units_per_meter = 0.0f;
   bool m_vr_pose_needs_refresh = true;

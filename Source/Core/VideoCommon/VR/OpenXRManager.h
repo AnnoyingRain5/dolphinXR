@@ -340,6 +340,15 @@ public:
       std::array<std::array<float, 4>, 4>& out_proj_rows,
       std::array<std::array<float, 4>, 2>& out_z_rows) const;
 
+  // Compute projection rows from the same tracked HMD pose without applying game-camera
+  // adjustments (Free Look is applied by GeometryShaderManager, while Camera Forward/Height and
+  // Camera Anchor are applied in GetEyeProjectionRows).  World-fixed screen/HUD routes use these
+  // rows so moving the game camera does not also move the virtual screen.
+  void GetTrackedEyeProjectionRows(
+      float units_per_meter,
+      std::array<std::array<float, 4>, 4>& out_proj_rows,
+      std::array<std::array<float, 4>, 2>& out_z_rows) const;
+
   // ---- Camera Anchor (Elements Group Override "CameraAnchor" handling) ----
   // Anchors the VR camera to a game element's view-space origin (e.g. a character's
   // head for first-person view). Video-thread only, like m_submitted_eye_views.
@@ -428,6 +437,11 @@ public:
   XrCompositionLayerFlags GetProjectionLayerExtraFlags() const;
 
 private:
+  void GetEyeProjectionRowsImpl(
+      float units_per_meter, bool apply_game_camera,
+      std::array<std::array<float, 4>, 4>& out_proj_rows,
+      std::array<std::array<float, 4>, 2>& out_z_rows) const;
+
   // XR_FB_passthrough: usable when the extension loaded and the system reports support.
   bool IsFBPassthroughUsable() const;
   // Create/start or pause the FB passthrough feed to match the Passthrough setting.
